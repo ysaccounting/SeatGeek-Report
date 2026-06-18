@@ -58,6 +58,8 @@
     padding: .7rem 1.25rem; font-family: inherit; font-weight: 600; font-size: .9rem; cursor: pointer; text-align: center;
     text-decoration: none; transition: background .15s; }
   .btn-download:hover { background: #1F2937; }
+  .btn-download.secondary { background: #fff; color: #374151; border: 1px solid #D1D5DB; margin-top: .6rem; }
+  .btn-download.secondary:hover { background: #F9FAFB; border-color: #9CA3AF; }
   .stat-line { font-size: .8rem; color: #6B7280; margin-top: .85rem; text-align: center; line-height: 1.6; }
   .error-item { padding: 1rem 2rem; background: #FEF2F2; border-top: 1px solid #FECACA; }
   .error-item p { font-size: .85rem; color: #B91C1C; }
@@ -108,6 +110,14 @@
     </div>
     <div class="file-list" id="listPurchase"></div>
 
+    <div class="section-label spaced">Category List <span style="text-transform:none;letter-spacing:0;font-weight:400;color:#B6BCC8;">(prior month's running list)</span></div>
+    <div class="dropzone" id="dzPrior" data-key="prior">
+      <input type="file" accept=".csv,.xlsx,.xlsm" multiple>
+      <div class="dropzone-text">Drag &amp; drop or <a href="#" class="browse">browse</a></div>
+      <div class="dropzone-hint">Last month's report or Category List — new performers get added</div>
+    </div>
+    <div class="file-list" id="listPrior"></div>
+
     <div class="actions">
       <button class="btn-process" id="processBtn" disabled>
         <span id="btnLabel">Generate Report</span>
@@ -130,13 +140,14 @@
 
 <script>
   const CATS = ["NFL", "MLB", "NBA", "NHL", "Concerts", "Other"];
-  const store = { invoice: [], purchase: [] };
+  const store = { invoice: [], purchase: [], prior: [] };
   const processBtn = document.getElementById('processBtn');
   const btnLabel = document.getElementById('btnLabel');
   const spinner = document.getElementById('spinner');
   const resultsDiv = document.getElementById('results');
 
-  function listEl(key) { return document.getElementById(key === 'invoice' ? 'listInvoice' : 'listPurchase'); }
+  function listEl(key) { return document.getElementById(
+    { invoice: 'listInvoice', purchase: 'listPurchase', prior: 'listPrior' }[key]); }
 
   function setup(id) {
     const dz = document.getElementById(id);
@@ -169,15 +180,15 @@
     processBtn.disabled = store.invoice.length === 0;
   }
 
-  ['dzInvoice', 'dzPurchase'].forEach(setup);
+  ['dzInvoice', 'dzPurchase', 'dzPrior'].forEach(setup);
 
   document.getElementById('clearBtn').addEventListener('click', () => {
     if (inflight) { inflight.abort(); inflight = null; }   // cancel any running generation
     resetProgress();
     spinner.style.display = 'none';
     btnLabel.textContent = 'Generate Report';
-    store.invoice = []; store.purchase = [];
-    render('invoice'); render('purchase');
+    store.invoice = []; store.purchase = []; store.prior = [];
+    render('invoice'); render('purchase'); render('prior');
     resultsDiv.style.display = 'none'; resultsDiv.innerHTML = '';
   });
 
@@ -225,7 +236,8 @@
       stat = `<div class="stat-line">${d.stats.invoice_rows.toLocaleString()} invoice rows &middot; ${d.stats.purchase_rows.toLocaleString()} purchase rows<br>${parts}</div>`;
     }
     resultsDiv.innerHTML = `<div class="download-wrap">
-        <a class="btn-download" href="${d.download_url}">Download ${d.filename}</a>${stat}
+        <a class="btn-download" href="${d.download_url}">Download ${d.filename}</a>
+        ${d.category_url ? `<a class="btn-download secondary" href="${d.category_url}">Download updated Category List</a>` : ''}${stat}
       </div>`;
     resultsDiv.style.display = 'block';
   }
@@ -276,6 +288,7 @@
     const fd = new FormData();
     store.invoice.forEach(f => fd.append('invoice', f));
     store.purchase.forEach(f => fd.append('purchase', f));
+    store.prior.forEach(f => fd.append('prior', f));
     inflight = new AbortController();
     try {
       const resp = await fetch('/process', { method: 'POST', body: fd, signal: inflight.signal });

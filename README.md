@@ -1,8 +1,9 @@
-# SG2 Report
+# SeatGeek Report
 
-Web app: upload this month's **Invoice Details** export(s) and **Purchase Details**
-export(s) (`.csv`, `.xlsx`, or `.xlsm`, one or many of each) and download the SG2
-report workbook with three tabs — **Summary**, **Invoice Details**, **Purchase Details**.
+Web app: upload this month's **Invoice Details** export(s), **Purchase Details**
+export(s), and the prior month's **Category List** (`.csv`, `.xlsx`, or `.xlsm`, one or
+many of each). Download the report workbook with four tabs — **Summary**, **Category**,
+**Invoice Details**, **Purchase Details** — plus a standalone updated **Category List**.
 
 The only thing the app decides is the **Category** (Inventory Type) for each invoice
 row. Everything on the Summary is a live Excel formula that references the Invoice
@@ -23,9 +24,15 @@ hand.
   - `Size of inventory Fund` = `SUM` of the Purchase Details Total Cost column
   Column letters in the formulas are detected from the actual headers, so the report
   still works if the export's column order changes.
+- **Category** — the running master list (`Performer/Team`, `League`), sorted by category
+  then performer. This is the prior list plus any performers new this month, so the tab
+  (or the standalone Category List file) is what you upload next month.
 - **Invoice Details** — every uploaded invoice row, cancelled rows removed, with a
   `Category` column added as column A.
 - **Purchase Details** — every uploaded purchase row, passed through as-is.
+
+A standalone **Category List** file (just the running list) is also produced for an easy,
+lightweight re-upload next month.
 
 ## How a row gets its Category
 
@@ -49,36 +56,36 @@ title list doesn't yet know.
 Concerts vs Other is the only genuinely subjective edge; the review gate and overrides
 exist to manage it.
 
-## Review gate, overrides, and "seen" memory
+## The running Category List (your memory)
 
-- When you generate, any **new** performer the rules placed in **Concerts** (a lone act
-  that could arguably be Other) is held back on a short review list *before* the final
-  file is built. Confirm or change each one, then generate.
-- A name you **change** is saved to `overrides.json` and that choice wins forever after.
-  A name you **accept as-is** stays rule-governed (so future rule tweaks still apply to
-  it) and is simply remembered so it isn't flagged again.
-- `seen.json` ships pre-seeded from the April report, so the first month only reviews
-  names that are new since April. League, stage-show, and opponent calls are confident
-  and never block.
+Each run, upload the prior month's **Category List** (or last month's report — the app
+reads its `Category` tab). That list is **authoritative**: any performer on it keeps its
+listed category, overriding the rules. Only performers *not* on the list fall to the
+rules, and any of those the rules place in **Concerts** (a lone act that might be Other)
+are held back on a short review list *before* the file is built — with the most common
+venue shown as a clue. Confirm or change each, then generate. The output's `Category` tab
+(and the standalone Category List file) is the prior list **plus** the new performers, so
+it becomes next month's upload. The list grows; you never re-review a known name.
+
+Because the list travels with the file, the app needs no server-side storage to remember
+categories — the memory rides along in the upload.
+
+Two small local files still exist as a fallback when no list is uploaded: `overrides.json`
+(names you explicitly changed) and `seen.json` (names already processed). Both ship empty;
+with the Category List workflow you can ignore them.
 
 ### Tuning
 
 Open `app.py` and edit the **DEAL TERMS & CONFIG** block at the top: `PROFIT_SHARE`
-(30%), `FEE_RATE` (7%), `CAPITAL_INVESTED`, the `MARKETPLACES` map, the league rosters,
-and `THEATER_TITLES` / `SHOW_EVENT_RE`. To bulk-lock categories from a historical report
-instead of reviewing them, run `python seed_lookup.py "Some_Prior_Report.xlsx"`.
+(30%), `FEE_RATE` (7%), `CAPITAL_INVESTED`, `REPORT_NAME`, the `MARKETPLACES` map, the
+league rosters, and `THEATER_TITLES` / `SHOW_EVENT_RE`.
 
 ## Persistence on Railway
 
-Railway's filesystem resets on every redeploy. To keep `overrides.json` and `seen.json`
-across deploys, attach a **Railway Volume** and point the app at it:
-
-```
-OVERRIDES_PATH=/data/overrides.json
-SEEN_PATH=/data/seen.json
-```
-
-(Copy the bundled `overrides.json` / `seen.json` into the volume once to seed it.)
+Not required with the Category List workflow — the running list is uploaded each run, so
+nothing needs to survive a redeploy. (If you ever prefer server-side memory instead,
+attach a Railway Volume and set `OVERRIDES_PATH=/data/overrides.json` and
+`SEEN_PATH=/data/seen.json`, but it's optional.)
 
 ## Run locally
 
@@ -92,16 +99,16 @@ python app.py        # http://localhost:5000
 1. Push this folder to a GitHub repo.
 2. Railway → New Project → Deploy from GitHub repo → pick it.
 3. Railway auto-detects Python (Nixpacks) and uses the start command in `railway.json`.
-   `$PORT` is provided automatically. Add a volume + the env vars above for persistence.
+   `$PORT` is provided automatically.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `app.py` | Flask backend — file parsing, categorisation, review gate, workbook builder |
-| `index.html` | Single-page upload UI with the review gate |
+| `index.html` | Single-page upload UI (invoice / purchase / category list) with the review gate |
 | `seed_lookup.py` | Optional: bulk-lock categories from a prior categorised report |
-| `overrides.json` | Human category locks (starts empty) |
-| `seen.json` | Performers already processed (pre-seeded from April) |
+| `overrides.json` | Fallback human category locks (starts empty) |
+| `seen.json` | Fallback processed-performer memory (starts empty) |
 | `requirements.txt` | Python dependencies |
 | `Procfile` / `railway.json` | Start command for Railway |

@@ -33,6 +33,7 @@ import zipfile
 import tempfile
 import datetime as dt
 import collections
+from urllib.parse import quote
 
 import pandas as pd
 from flask import Flask, request, jsonify, send_file, send_from_directory, abort
@@ -281,8 +282,10 @@ def _woc(ws, value, *, bold=False, white=False, fill=None, numfmt=None, wrap=Fal
     return c
 
 
-def build_report(inv_df, purchase_df, mapping, report_label):
-    """Return xlsx bytes for the three-tab SG2 workbook."""
+def build_report(inv_df, purchase_df, mapping, report_label, category_list=None):
+    """Return xlsx bytes for the four-tab workbook (Summary, Category, Invoice
+    Details, Purchase Details). `category_list` is the running master list as
+    (performer, category) pairs; if None it defaults to this month's performers."""
     perf = _resolve(inv_df, INV_PERFORMER)
     inv_cols = list(inv_df.columns)
     out_cols = ["Category"] + inv_cols
@@ -353,16 +356,20 @@ def build_report(inv_df, purchase_df, mapping, report_label):
     sm.append([_woc(sm, "Size of inventory Fund", bold=True),
                _woc(sm, fund, numfmt=_MONEY0)])
 
-    # ---------------- Legend (Category + Performer) ----------------
-    leg = wb.create_sheet("Legend")
-    leg.column_dimensions["A"].width = 14
-    leg.column_dimensions["B"].width = 48
-    leg.append([_woc(leg, h, bold=True, white=True, fill=_HDR_FILL) for h in ("Category", "Performer/Team")])
-    legend_rows = sorted(
-        ((cat, name) for name, cat in mapping.items() if str(name).strip()),
-        key=lambda t: (str(t[0]).lower(), str(t[1]).lower()))
-    for cat, name in legend_rows:
-        leg.append([_woc(leg, cat), _woc(leg, name)])
+    # ---------------- Category (running master list) ----------------
+    # Same shape as the uploaded master (Performer/Team, League) so this tab can be
+    # fed back in next month. Sorted by category A-Z, then performer A-Z.
+    cat_sheet = wb.create_sheet("Category")
+    cat_sheet.column_dimensions["A"].width = 48
+    cat_sheet.column_dimensions["B"].width = 14
+    cat_sheet.append([_woc(cat_sheet, h, bold=True, white=True, fill=_HDR_FILL)
+                      for h in ("Performer/Team", "League")])
+    if category_list is None:
+        category_list = [(name, cat) for name, cat in mapping.items() if str(name).strip()]
+    cat_rows = sorted(((str(n).strip(), c) for n, c in category_list if str(n).strip()),
+                      key=lambda t: (str(t[1]).lower(), str(t[0]).lower()))
+    for name, cat in cat_rows:
+        cat_sheet.append([_woc(cat_sheet, name), _woc(cat_sheet, cat)])
 
     # ---------------- Invoice Details ----------------
     inv = wb.create_sheet("Invoice Details")
@@ -395,6 +402,58 @@ def _isnan(v):
 def _resolve_in(cols, wanted):
     norm = {str(c).strip().lower(): c for c in cols}
     return norm.get(wanted.strip().lower())
+
+
+def read_category_list(files):
+    """Read an uploaded master category list into {normkey: (display_name, category)}.
+    Accepts the standalone list (Performer/Team + League) or any report/sheet that has
+    a performer column and a League / Category / Inventory Type column."""
+    master = {}
+    for name, data in files:
+        try:
+            if name.lower().endswith(".csv"):
+                sheets = {"_": pd.read_csv(io.StringIO(data.decode("utf-8-sig", errors="replace")))}
+            else:
+                sheets = pd.read_excel(io.BytesIO(data), sheet_name=None)
+        except Exception:
+            continue
+        for df in sheets.values():
+            pcol = _resolve(df, INV_PERFORMER) or _resolve(df, "Performer")
+            ccol = next((c for c in (_resolve(df, "League"), _resolve(df, "Category"),
+                                     _resolve(df, "Inventory Type")) if c), None)
+            if pcol is None or ccol is None:
+                continue
+            for p, c in zip(df[pcol], df[ccol]):
+                if pd.notna(p) and str(p).strip() and pd.notna(c):
+                    k = normalize_name(p)
+                    if k:
+                        master[k] = (str(p).strip(), canon_category(c))
+    return master
+
+
+def merge_master(prior_master, mapping):
+    """Carry the prior master forward and fold in this month's performers/categories.
+    Returns a list of (display_name, category)."""
+    master = dict(prior_master)
+    for name, cat in mapping.items():
+        if str(name).strip():
+            master[normalize_name(name)] = (str(name).strip(), cat)
+    return [val for val in master.values()]
+
+
+def build_category_file(category_list):
+    """Standalone running-list workbook (one Category sheet) for easy re-upload."""
+    wb = Workbook(write_only=True)
+    ws = wb.create_sheet("Category")
+    ws.column_dimensions["A"].width = 48
+    ws.column_dimensions["B"].width = 14
+    ws.append([_woc(ws, h, bold=True, white=True, fill=_HDR_FILL) for h in ("Performer/Team", "League")])
+    for name, cat in sorted(((str(n).strip(), c) for n, c in category_list if str(n).strip()),
+                            key=lambda t: (str(t[1]).lower(), str(t[0]).lower())):
+        ws.append([_woc(ws, name), _woc(ws, cat)])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 # =========================================================================== #
@@ -512,11 +571,12 @@ def _prepare(invoice_files, purchase_files):
     return inv, pur
 
 
-def _store(token, inv, pur, mapping, label):
+def _store(token, inv, pur, mapping, label, prior_master):
     folder = os.path.join(STORE_DIR, token)
     os.makedirs(folder, exist_ok=True)
     with open(os.path.join(folder, "data.pkl"), "wb") as fh:
-        pickle.dump({"inv": inv, "pur": pur, "mapping": mapping, "label": label}, fh)
+        pickle.dump({"inv": inv, "pur": pur, "mapping": mapping, "label": label,
+                     "prior_master": prior_master}, fh)
     return folder
 
 
@@ -525,14 +585,21 @@ def _load(token):
         return pickle.load(fh)
 
 
-def _write_final(token, inv, pur, mapping, label):
-    data = build_report(inv, pur, mapping, label)
+def _write_final(token, inv, pur, mapping, label, prior_master):
+    category_list = merge_master(prior_master, mapping)
+    report = build_report(inv, pur, mapping, label, category_list)
+    cat_bytes = build_category_file(category_list)
     folder = os.path.join(STORE_DIR, token)
     os.makedirs(folder, exist_ok=True)
-    fn = f"{_safe(label)}.xlsx"
-    with open(os.path.join(folder, fn), "wb") as fh:
-        fh.write(data)
-    return fn
+    report_fn = f"{_safe(label)}.xlsx"
+    cat_fn = f"{_safe(label).replace('Report', 'Category List')}.xlsx"
+    if cat_fn == report_fn:
+        cat_fn = f"{_safe(label)} - Category List.xlsx"
+    with open(os.path.join(folder, report_fn), "wb") as fh:
+        fh.write(report)
+    with open(os.path.join(folder, cat_fn), "wb") as fh:
+        fh.write(cat_bytes)
+    return report_fn, cat_fn
 
 
 def _stats(inv, pur, mapping):
@@ -557,33 +624,36 @@ def index():
 def process():
     inv_files = [(f.filename, f.read()) for f in request.files.getlist("invoice") if f.filename]
     pur_files = [(f.filename, f.read()) for f in request.files.getlist("purchase") if f.filename]
+    prior_files = [(f.filename, f.read()) for f in request.files.getlist("prior") if f.filename]
     if not inv_files:
         return jsonify({"error": "Please upload at least one Invoice Details file."}), 400
 
     try:
         inv, pur = _prepare(inv_files, pur_files)
+        prior_master = read_category_list(prior_files)          # {normkey: (display, category)}
         overrides = load_overrides()
-        mapping, reasons, counts = build_mapping(inv, overrides)
+        # The uploaded running list is authoritative; persistent overrides fill any gaps.
+        lookup = {**overrides, **{k: cat for k, (disp, cat) in prior_master.items()}}
+        mapping, reasons, counts = build_mapping(inv, lookup)
     except Exception as exc:
         return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
 
     label = (request.form.get("label") or "").strip() or _default_label(inv, pur)
     token = uuid.uuid4().hex
-    _store(token, inv, pur, mapping, label)
+    _store(token, inv, pur, mapping, label, prior_master)
     _cleanup_old()
 
     warnings = []
     if not pur_files:
         warnings.append("No Purchase Details uploaded — \u201cSize of inventory Fund\u201d will be $0.")
+    if not prior_files:
+        warnings.append("No prior Category List uploaded — every performer will look new this run.")
 
-    # Review only NEW names whose rule guess is the gray Concerts default — i.e. a lone
-    # act the rules placed in Concerts that you might want to move to Other. League,
-    # opponent, and known stage-show calls are confident and skipped. The most common
-    # venue is shown alongside each name as a clue to theatrical performances.
-    seen = load_seen()
+    # Review only NEW names (not on the running list / overrides / seen) whose rule guess
+    # is the gray Concerts default. The most common venue is shown as a theatrical clue.
+    known = set(prior_master) | set(overrides) | load_seen()
     review_names = [n for n, why in reasons.items()
-                    if why == "default_concert"
-                    and normalize_name(n) not in seen and normalize_name(n) not in overrides]
+                    if why == "default_concert" and normalize_name(n) not in known]
     venues = {}
     perf = _resolve(inv, INV_PERFORMER)
     vcol = _resolve(inv, INV_VENUE)
@@ -604,10 +674,12 @@ def process():
                         "items": review, "warnings": warnings})
 
     add_seen(mapping.keys())
-    fn = _write_final(token, inv, pur, mapping, label)
-    return jsonify({"status": "ready", "token": token, "filename": fn,
-                    "download_url": f"/download/{token}", "label": label,
-                    "warnings": warnings, "stats": _stats(inv, pur, mapping)})
+    report_fn, cat_fn = _write_final(token, inv, pur, mapping, label, prior_master)
+    return jsonify({"status": "ready", "token": token, "filename": report_fn,
+                    "download_url": f"/download/{token}?f={quote(report_fn)}",
+                    "category_filename": cat_fn,
+                    "category_url": f"/download/{token}?f={quote(cat_fn)}",
+                    "label": label, "warnings": warnings, "stats": _stats(inv, pur, mapping)})
 
 
 @app.route("/finalize", methods=["POST"])
@@ -623,8 +695,7 @@ def finalize():
 
     mapping = st["mapping"]
     # Only names you actually CHANGED become locked overrides; accepting a rule guess
-    # leaves the name rule-governed (so future rule improvements still apply). Everything
-    # processed is marked seen so it won't be re-flagged next month.
+    # leaves the name rule-governed. The reviewed names also fold into the running list.
     changed = {p: v for p, v in corrections.items() if v != mapping.get(p)}
     mapping.update(corrections)
     if changed:
@@ -632,13 +703,16 @@ def finalize():
     add_seen(mapping.keys())
 
     try:
-        fn = _write_final(token, st["inv"], st["pur"], mapping, st["label"])
+        report_fn, cat_fn = _write_final(token, st["inv"], st["pur"], mapping, st["label"],
+                                         st.get("prior_master", {}))
     except Exception as exc:
         return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
 
-    return jsonify({"status": "ready", "token": token, "filename": fn,
-                    "download_url": f"/download/{token}", "label": st["label"],
-                    "stats": _stats(st["inv"], st["pur"], mapping)})
+    return jsonify({"status": "ready", "token": token, "filename": report_fn,
+                    "download_url": f"/download/{token}?f={quote(report_fn)}",
+                    "category_filename": cat_fn,
+                    "category_url": f"/download/{token}?f={quote(cat_fn)}",
+                    "label": st["label"], "stats": _stats(st["inv"], st["pur"], mapping)})
 
 
 @app.route("/download/<token>")
@@ -646,10 +720,11 @@ def download(token):
     folder = os.path.join(STORE_DIR, os.path.basename(token))
     if not os.path.isdir(folder):
         abort(404)
+    want = request.args.get("f")
     xlsx = [f for f in os.listdir(folder) if f.lower().endswith(".xlsx")]
     if not xlsx:
         abort(404)
-    pick = xlsx[0]
+    pick = want if (want and want in xlsx) else sorted(xlsx, key=len)[0]
     return send_file(os.path.join(folder, pick),
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                      as_attachment=True, download_name=pick)
