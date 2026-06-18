@@ -92,7 +92,7 @@
 <div class="card">
   <div class="card-body">
     <div class="card-title">SeatGeek Report</div>
-    <div class="card-sub">Upload invoice details and purchase details reports from TicketVault to generate the monthly SeatGeek report. Date range is Jan 1st, 2026 through the prior month-end date.</div>
+    <div class="card-sub">Upload invoice details and purchase details reports from TicketVault, and the prior month's running category list, to generate the monthly SeatGeek report. Date range is Jan 1st, 2026 through the prior month-end date. Category list will be updated for new performers added this cycle.</div>
 
     <div class="section-label">Invoice Details</div>
     <div class="dropzone" id="dzInvoice" data-key="invoice">
@@ -110,11 +110,11 @@
     </div>
     <div class="file-list" id="listPurchase"></div>
 
-    <div class="section-label spaced">Category List <span style="text-transform:none;letter-spacing:0;font-weight:400;color:#B6BCC8;">(prior month's running list)</span></div>
+    <div class="section-label spaced">Category List <span style="text-transform:none;letter-spacing:0;font-weight:400;color:#B6BCC8;"></span></div>
     <div class="dropzone" id="dzPrior" data-key="prior">
       <input type="file" accept=".csv,.xlsx,.xlsm" multiple>
       <div class="dropzone-text">Drag &amp; drop or <a href="#" class="browse">browse</a></div>
-      <div class="dropzone-hint">Last month's report or Category List — new performers get added</div>
+      <div class="dropzone-hint">Prior month's running category list</div>
     </div>
     <div class="file-list" id="listPrior"></div>
 
