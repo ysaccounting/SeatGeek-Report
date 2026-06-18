@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SG2 Report</title>
+<title>SeatGeek Report</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -86,8 +86,8 @@
 <body>
 <div class="card">
   <div class="card-body">
-    <div class="card-title">SG2 Report</div>
-    <div class="card-sub">Upload this month's Invoice Details and Purchase Details exports to generate the SG2 report workbook. Categories are filled in automatically; anything new is flagged for a quick review before the file is built.</div>
+    <div class="card-title">SeatGeek Report</div>
+    <div class="card-sub">Upload invoice details and purchase details reports from TicketVault to generate the monthly SeatGeek report. Date range is Jan 1st, 2026 through the prior month-end date.</div>
 
     <div class="section-label">Invoice Details</div>
     <div class="dropzone" id="dzInvoice" data-key="invoice">
@@ -104,10 +104,7 @@
       <div class="dropzone-hint">One or more .csv / .xlsx / .xlsm files</div>
     </div>
     <div class="file-list" id="listPurchase"></div>
-
-    <div class="field-label">Report file name (optional)</div>
-    <input type="text" class="text-input" id="labelInput" placeholder="auto-detected from event dates, e.g. April_2026_-_SG2_Report">
-
+   
     <div class="actions">
       <button class="btn-process" id="processBtn" disabled>
         <span id="btnLabel">Generate Report</span>
