@@ -265,6 +265,7 @@ def build_mapping(inv_df, overrides):
 _MONEY2 = '"$"#,##0.00'
 _MONEY0 = '"$"#,##0'
 _PCT = '0.00%'
+_PCT0 = '0%'
 _HDR_FILL = PatternFill("solid", fgColor="374151")
 _TOT_FILL = PatternFill("solid", fgColor="EAECF0")
 
@@ -282,10 +283,11 @@ def _woc(ws, value, *, bold=False, white=False, fill=None, numfmt=None, wrap=Fal
     return c
 
 
-def build_report(inv_df, purchase_df, mapping, report_label, category_list=None):
-    """Return xlsx bytes for the four-tab workbook (Summary, Category, Invoice
-    Details, Purchase Details). `category_list` is the running master list as
-    (performer, category) pairs; if None it defaults to this month's performers."""
+def build_report(inv_df, purchase_df, mapping, report_label, category_list=None,
+                 summary_title="Year to date data from deal start"):
+    """Return xlsx bytes for the four-tab workbook (Summary, Invoice Details, Purchase
+    Details, Category). `category_list` is the running master list as (performer,
+    category) pairs; `summary_title` is the A1 date-range line."""
     perf = _resolve(inv_df, INV_PERFORMER)
     inv_cols = list(inv_df.columns)
     out_cols = ["Category"] + inv_cols
@@ -312,40 +314,42 @@ def build_report(inv_df, purchase_df, mapping, report_label, category_list=None)
 
     # ---------------- Summary ----------------
     sm = wb.create_sheet("Summary")
-    sm.column_dimensions["A"].width = 30
-    for col in "BCDEFGHIJ":
-        sm.column_dimensions[col].width = 15
-    sm.append([_woc(sm, "Year to date data from deal start", bold=True)])
+    # Widths sized so every header sits on one line (no wrapping).
+    col_widths = {"A": 16, "B": 19, "C": 14, "D": 14, "E": 14,
+                  "F": 14, "G": 15, "H": 13, "I": 21, "J": 31}
+    for col, w in col_widths.items():
+        sm.column_dimensions[col].width = w
+    sm.append([_woc(sm, summary_title, bold=True)])
     headers = ["Inventory Type", "Sales within deal",
                "% Sales on SG", "% Sales on VS", "% Sales on SH", "% Sales Other",
-               "COGS", "Profit", "Profit Share to SG", "Profit Share to SG\nLess fees"]
-    sm.append([_woc(sm, h, bold=True, white=True, fill=_HDR_FILL, wrap=True) for h in headers])
+               "COGS", "Profit", "Profit Share to SG", "Profit Share to SG Less fees"]
+    sm.append([_woc(sm, h, bold=True, white=True, fill=_HDR_FILL) for h in headers])
 
     first, last = 3, 3 + len(CATEGORY_ORDER) - 1
     for i, cat in enumerate(CATEGORY_ORDER):
         r = first + i
         row = [_woc(sm, cat, bold=True)]
-        row.append(_woc(sm, f"=SUMIF('Invoice Details'!$A:$A,Summary!$A{r},'Invoice Details'!${price_L}:${price_L})", numfmt=_MONEY2))
+        row.append(_woc(sm, f"=SUMIF('Invoice Details'!$A:$A,Summary!$A{r},'Invoice Details'!${price_L}:${price_L})", numfmt=_MONEY0))
         for _, client in MARKETPLACES:
-            row.append(_woc(sm, f'=SUMIFS(\'Invoice Details\'!${price_L}:${price_L},\'Invoice Details\'!${client_L}:${client_L},"{client}",\'Invoice Details\'!$A:$A,Summary!$A{r})/$B{r}', numfmt=_PCT))
+            row.append(_woc(sm, f'=SUMIFS(\'Invoice Details\'!${price_L}:${price_L},\'Invoice Details\'!${client_L}:${client_L},"{client}",\'Invoice Details\'!$A:$A,Summary!$A{r})/$B{r}', numfmt=_PCT0))
         c0 = get_column_letter(3)
         cN = get_column_letter(2 + len(MARKETPLACES))
-        row.append(_woc(sm, f"=1-SUM({c0}{r}:{cN}{r})", numfmt=_PCT))
-        row.append(_woc(sm, f"=SUMIF('Invoice Details'!$A:$A,Summary!$A{r},'Invoice Details'!${cost_L}:${cost_L})", numfmt=_MONEY2))
-        row.append(_woc(sm, f"=B{r}-G{r}", numfmt=_MONEY2))
-        row.append(_woc(sm, f"=H{r}*{PROFIT_SHARE}", numfmt=_MONEY2))
-        row.append(_woc(sm, f"=(H{r}-{FEE_RATE}*B{r})*{PROFIT_SHARE}", numfmt=_MONEY2))
+        row.append(_woc(sm, f"=1-SUM({c0}{r}:{cN}{r})", numfmt=_PCT0))
+        row.append(_woc(sm, f"=SUMIF('Invoice Details'!$A:$A,Summary!$A{r},'Invoice Details'!${cost_L}:${cost_L})", numfmt=_MONEY0))
+        row.append(_woc(sm, f"=B{r}-G{r}", numfmt=_MONEY0))
+        row.append(_woc(sm, f"=H{r}*{PROFIT_SHARE}", numfmt=_MONEY0))
+        row.append(_woc(sm, f"=(H{r}-{FEE_RATE}*B{r})*{PROFIT_SHARE}", numfmt=_MONEY0))
         sm.append(row)
 
     # Totals
     tr = [_woc(sm, "Totals", bold=True, fill=_TOT_FILL)]
     def tcell(formula, fmt):
         return _woc(sm, formula, bold=True, fill=_TOT_FILL, numfmt=fmt)
-    tr.append(tcell(f"=SUM(B{first}:B{last})", _MONEY2))
+    tr.append(tcell(f"=SUM(B{first}:B{last})", _MONEY0))
     for col in "CDEF":
-        tr.append(tcell(f"=SUMPRODUCT($B${first}:$B${last}*{col}{first}:{col}{last})/$B${last+1}", _PCT))
+        tr.append(tcell(f"=SUMPRODUCT($B${first}:$B${last}*{col}{first}:{col}{last})/$B${last+1}", _PCT0))
     for col in "GHIJ":
-        tr.append(tcell(f"=SUM({col}{first}:{col}{last})", _MONEY2))
+        tr.append(tcell(f"=SUM({col}{first}:{col}{last})", _MONEY0))
     sm.append(tr)
 
     sm.append([])
@@ -355,21 +359,6 @@ def build_report(inv_df, purchase_df, mapping, report_label, category_list=None)
     fund = f"=SUM('Purchase Details'!{pur_cost_L}:{pur_cost_L})" if pur_cost_L else 0
     sm.append([_woc(sm, "Size of inventory Fund", bold=True),
                _woc(sm, fund, numfmt=_MONEY0)])
-
-    # ---------------- Category (running master list) ----------------
-    # Same shape as the uploaded master (Performer/Team, League) so this tab can be
-    # fed back in next month. Sorted by category A-Z, then performer A-Z.
-    cat_sheet = wb.create_sheet("Category")
-    cat_sheet.column_dimensions["A"].width = 48
-    cat_sheet.column_dimensions["B"].width = 14
-    cat_sheet.append([_woc(cat_sheet, h, bold=True, white=True, fill=_HDR_FILL)
-                      for h in ("Performer/Team", "League")])
-    if category_list is None:
-        category_list = [(name, cat) for name, cat in mapping.items() if str(name).strip()]
-    cat_rows = sorted(((str(n).strip(), c) for n, c in category_list if str(n).strip()),
-                      key=lambda t: (str(t[1]).lower(), str(t[0]).lower()))
-    for name, cat in cat_rows:
-        cat_sheet.append([_woc(cat_sheet, name), _woc(cat_sheet, cat)])
 
     # ---------------- Invoice Details ----------------
     inv = wb.create_sheet("Invoice Details")
@@ -386,6 +375,21 @@ def build_report(inv_df, purchase_df, mapping, report_label, category_list=None)
     pur.append([_woc(pur, h, bold=True, white=True, fill=_HDR_FILL) for h in pur_cols])
     for rec in purchase_df.itertuples(index=False, name=None):
         pur.append([None if _isnan(v) else v for v in rec])
+
+    # ---------------- Category (running master list, LAST tab) ----------------
+    # Same shape as the uploaded master (Performer/Team, League) so this tab can be
+    # fed back in next month. Sorted by category A-Z, then performer A-Z.
+    cat_sheet = wb.create_sheet("Category")
+    cat_sheet.column_dimensions["A"].width = 48
+    cat_sheet.column_dimensions["B"].width = 14
+    cat_sheet.append([_woc(cat_sheet, h, bold=True, white=True, fill=_HDR_FILL)
+                      for h in ("Performer/Team", "League")])
+    if category_list is None:
+        category_list = [(name, cat) for name, cat in mapping.items() if str(name).strip()]
+    cat_rows = sorted(((str(n).strip(), c) for n, c in category_list if str(n).strip()),
+                      key=lambda t: (str(t[1]).lower(), str(t[0]).lower()))
+    for name, cat in cat_rows:
+        cat_sheet.append([_woc(cat_sheet, name), _woc(cat_sheet, cat)])
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -532,7 +536,7 @@ def _safe(s):
     return re.sub(r'[\\/:*?"<>|]+', " ", str(s)).strip() if s else s
 
 
-def _default_label(inv_df, pur_df=None):
+def _period_end(inv_df, pur_df=None):
     # Report period ends at the latest transaction in the files: invoice "Created Date"
     # and purchase "PO Created". (Event Date is ignored — it runs into the future.)
     cands = []
@@ -551,7 +555,39 @@ def _default_label(inv_df, pur_df=None):
     when = max(cands) if cands else None
     if when is None or when > today:
         when = today.normalize().replace(day=1) - pd.Timedelta(days=1)  # prior month-end
-    return f"{REPORT_NAME} - {when.strftime('%B %Y')}"
+    return when
+
+
+def _invoice_period_end(inv_df):
+    # A1's reporting period closes at the latest INVOICE (sales) date. A purchase PO
+    # dated later can still push the *filename* month forward, but the stated sales
+    # range ends with the last sale.
+    today = pd.Timestamp.now()
+    when = None
+    icol = _resolve(inv_df, "Created Date")
+    if icol is not None:
+        d = pd.to_datetime(inv_df[icol], errors="coerce")
+        if d.notna().any():
+            when = d.max()
+    if when is None or when > today:
+        when = today.normalize().replace(day=1) - pd.Timedelta(days=1)  # prior month-end
+    return when
+
+
+def _ordinal(n):
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def _default_label(inv_df, pur_df=None):
+    return f"{REPORT_NAME} - {_period_end(inv_df, pur_df).strftime('%B %Y')}"
+
+
+def _summary_title(inv_df, pur_df=None):
+    """A1 text: deal start (Jan 1st, 2026) through the end of the latest sales month."""
+    when = _invoice_period_end(inv_df)
+    month_end = when.replace(day=1) + pd.offsets.MonthEnd(1)
+    return (f"Jan 1st, 2026 through {month_end.strftime('%B')} "
+            f"{_ordinal(int(month_end.day))}, {int(month_end.year)}")
 
 
 # =========================================================================== #
@@ -587,7 +623,7 @@ def _load(token):
 
 def _write_final(token, inv, pur, mapping, label, prior_master):
     category_list = merge_master(prior_master, mapping)
-    report = build_report(inv, pur, mapping, label, category_list)
+    report = build_report(inv, pur, mapping, label, category_list, _summary_title(inv, pur))
     cat_bytes = build_category_file(category_list)
     folder = os.path.join(STORE_DIR, token)
     os.makedirs(folder, exist_ok=True)
@@ -599,7 +635,12 @@ def _write_final(token, inv, pur, mapping, label, prior_master):
         fh.write(report)
     with open(os.path.join(folder, cat_fn), "wb") as fh:
         fh.write(cat_bytes)
-    return report_fn, cat_fn
+    # One bundle for a single download button.
+    zip_fn = f"{_safe(label)}.zip"
+    with zipfile.ZipFile(os.path.join(folder, zip_fn), "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(report_fn, report)
+        zf.writestr(cat_fn, cat_bytes)
+    return zip_fn
 
 
 def _stats(inv, pur, mapping):
@@ -674,11 +715,9 @@ def process():
                         "items": review, "warnings": warnings})
 
     add_seen(mapping.keys())
-    report_fn, cat_fn = _write_final(token, inv, pur, mapping, label, prior_master)
-    return jsonify({"status": "ready", "token": token, "filename": report_fn,
-                    "download_url": f"/download/{token}?f={quote(report_fn)}",
-                    "category_filename": cat_fn,
-                    "category_url": f"/download/{token}?f={quote(cat_fn)}",
+    zip_fn = _write_final(token, inv, pur, mapping, label, prior_master)
+    return jsonify({"status": "ready", "token": token, "filename": zip_fn,
+                    "download_url": f"/download/{token}?f={quote(zip_fn)}",
                     "label": label, "warnings": warnings, "stats": _stats(inv, pur, mapping)})
 
 
@@ -703,15 +742,13 @@ def finalize():
     add_seen(mapping.keys())
 
     try:
-        report_fn, cat_fn = _write_final(token, st["inv"], st["pur"], mapping, st["label"],
-                                         st.get("prior_master", {}))
+        zip_fn = _write_final(token, st["inv"], st["pur"], mapping, st["label"],
+                              st.get("prior_master", {}))
     except Exception as exc:
         return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
 
-    return jsonify({"status": "ready", "token": token, "filename": report_fn,
-                    "download_url": f"/download/{token}?f={quote(report_fn)}",
-                    "category_filename": cat_fn,
-                    "category_url": f"/download/{token}?f={quote(cat_fn)}",
+    return jsonify({"status": "ready", "token": token, "filename": zip_fn,
+                    "download_url": f"/download/{token}?f={quote(zip_fn)}",
                     "label": st["label"], "stats": _stats(st["inv"], st["pur"], mapping)})
 
 
@@ -721,12 +758,17 @@ def download(token):
     if not os.path.isdir(folder):
         abort(404)
     want = request.args.get("f")
-    xlsx = [f for f in os.listdir(folder) if f.lower().endswith(".xlsx")]
-    if not xlsx:
+    files = [f for f in os.listdir(folder) if f.lower().endswith((".xlsx", ".zip"))]
+    if not files:
         abort(404)
-    pick = want if (want and want in xlsx) else sorted(xlsx, key=len)[0]
-    return send_file(os.path.join(folder, pick),
-                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    if want and want in files:
+        pick = want
+    else:
+        zips = [f for f in files if f.lower().endswith(".zip")]
+        pick = zips[0] if zips else sorted(files, key=len)[0]
+    mime = ("application/zip" if pick.lower().endswith(".zip")
+            else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return send_file(os.path.join(folder, pick), mimetype=mime,
                      as_attachment=True, download_name=pick)
 
 

@@ -54,12 +54,10 @@
   .progress-bar { height: 100%; width: 0; background: #4B5563; border-radius: 999px; transition: width .35s ease; }
   .results { border-top: 1px solid #F3F4F6; }
   .download-wrap { padding: 1.25rem 2rem 1.5rem; }
-  .btn-download { display: block; width: 100%; background: #374151; color: #fff; border: none; border-radius: 8px;
+  .btn-download { display: block; width: 100%; background: #4B5563; color: #fff; border: none; border-radius: 8px;
     padding: .7rem 1.25rem; font-family: inherit; font-weight: 600; font-size: .9rem; cursor: pointer; text-align: center;
     text-decoration: none; transition: background .15s; }
   .btn-download:hover { background: #1F2937; }
-  .btn-download.secondary { background: #fff; color: #374151; border: 1px solid #D1D5DB; margin-top: .6rem; }
-  .btn-download.secondary:hover { background: #F9FAFB; border-color: #9CA3AF; }
   .stat-line { font-size: .8rem; color: #6B7280; margin-top: .85rem; text-align: center; line-height: 1.6; }
   .error-item { padding: 1rem 2rem; background: #FEF2F2; border-top: 1px solid #FECACA; }
   .error-item p { font-size: .85rem; color: #B91C1C; }
@@ -110,7 +108,7 @@
     </div>
     <div class="file-list" id="listPurchase"></div>
 
-    <div class="section-label spaced">Category List <span style="text-transform:none;letter-spacing:0;font-weight:400;color:#B6BCC8;"></span></div>
+    <div class="section-label spaced">Category List</div>
     <div class="dropzone" id="dzPrior" data-key="prior">
       <input type="file" accept=".csv,.xlsx,.xlsm" multiple>
       <div class="dropzone-text">Drag &amp; drop or <a href="#" class="browse">browse</a></div>
@@ -236,8 +234,7 @@
       stat = `<div class="stat-line">${d.stats.invoice_rows.toLocaleString()} invoice rows &middot; ${d.stats.purchase_rows.toLocaleString()} purchase rows<br>${parts}</div>`;
     }
     resultsDiv.innerHTML = `<div class="download-wrap">
-        <a class="btn-download" href="${d.download_url}">Download ${d.filename}</a>
-        ${d.category_url ? `<a class="btn-download secondary" href="${d.category_url}">Download updated Category List</a>` : ''}${stat}
+        <a class="btn-download" href="${d.download_url}">Download ${d.filename}</a>${stat}
       </div>`;
     resultsDiv.style.display = 'block';
   }
