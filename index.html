@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SG2 Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #EAECF0; min-height: 100vh; display: flex;
+    align-items: center; justify-content: center; padding: 2rem 1rem; color: #111; }
+  .card { background: #fff; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.07), 0 8px 32px rgba(0,0,0,.09);
+    width: 100%; max-width: 620px; overflow: hidden; }
+  .card-body { padding: 2rem 2rem 1.75rem; }
+  .card-title { font-size: 1.3rem; font-weight: 700; margin-bottom: .35rem; letter-spacing: -.01em; }
+  .card-sub { font-size: .875rem; color: #6B7280; line-height: 1.6; margin-bottom: 1.6rem; }
+  .section-label { font-size: .65rem; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+    color: #9CA3AF; margin-bottom: .5rem; }
+  .section-label.spaced { margin-top: 1.3rem; }
+  .dropzone { border: 2px dashed #C4C9D8; border-radius: 12px; background: #F8F9FC; padding: 1.4rem 1.5rem;
+    text-align: center; cursor: pointer; transition: border-color .2s, background .2s; position: relative; }
+  .dropzone:hover, .dropzone.drag-over { border-color: #7B8DB0; background: #F0F3FA; }
+  .dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .dropzone-text { font-size: .9rem; color: #374151; }
+  .dropzone-text a { color: #4B6FBE; text-decoration: none; }
+  .dropzone-text a:hover { text-decoration: underline; }
+  .dropzone-hint { font-size: .78rem; color: #9CA3AF; margin-top: .25rem; }
+  .file-list { display: flex; flex-direction: column; gap: .35rem; margin-top: .6rem; }
+  .file-pill { display: flex; align-items: center; gap: .6rem; background: #F3F4F6; border-radius: 7px;
+    padding: .4rem .7rem; font-size: .8rem; color: #374151; }
+  .file-pill .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-pill .remove { margin-left: auto; cursor: pointer; color: #9CA3AF; background: none; border: none;
+    font-size: 1rem; line-height: 1; padding: 0 2px; }
+  .file-pill .remove:hover { color: #374151; }
+  .field-label { font-size: .65rem; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+    color: #9CA3AF; margin: 1.3rem 0 .5rem; }
+  .text-input { width: 100%; border: 1px solid #D1D5DB; border-radius: 8px; padding: .6rem .75rem;
+    font-family: inherit; font-size: .9rem; color: #374151; }
+  .text-input:focus { outline: none; border-color: #7B8DB0; }
+  .actions { display: flex; gap: .75rem; margin-top: 1.5rem; }
+  .btn-process { flex: 1; background: #4B5563; color: #fff; border: none; border-radius: 8px; padding: .7rem 1.25rem;
+    font-family: inherit; font-weight: 600; font-size: .9rem; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; gap: .5rem; transition: background .15s; }
+  .btn-process:hover:not(:disabled) { background: #1F2937; }
+  .btn-process:disabled { opacity: .55; cursor: not-allowed; }
+  .btn-clear { background: #fff; color: #374151; border: 1px solid #D1D5DB; border-radius: 8px; padding: .7rem 1.25rem;
+    font-family: inherit; font-weight: 500; font-size: .9rem; cursor: pointer; transition: background .15s, border-color .15s; }
+  .btn-clear:hover { background: #F9FAFB; border-color: #9CA3AF; }
+  .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff;
+    border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .results { border-top: 1px solid #F3F4F6; }
+  .download-wrap { padding: 1.25rem 2rem 1.5rem; }
+  .btn-download { display: block; width: 100%; background: #374151; color: #fff; border: none; border-radius: 8px;
+    padding: .7rem 1.25rem; font-family: inherit; font-weight: 600; font-size: .9rem; cursor: pointer; text-align: center;
+    text-decoration: none; transition: background .15s; }
+  .btn-download:hover { background: #1F2937; }
+  .stat-line { font-size: .8rem; color: #6B7280; margin-top: .85rem; text-align: center; line-height: 1.6; }
+  .error-item { padding: 1rem 2rem; background: #FEF2F2; border-top: 1px solid #FECACA; }
+  .error-item p { font-size: .85rem; color: #B91C1C; }
+
+  /* Review gate */
+  .review { border-top: 1px solid #F3F4F6; padding: 1.25rem 2rem 1.5rem; }
+  .review-head { font-size: .95rem; font-weight: 700; color: #92400E; margin-bottom: .25rem; }
+  .review-note { font-size: .82rem; color: #6B7280; line-height: 1.55; margin-bottom: 1rem; }
+  .review-row { display: flex; align-items: center; gap: .6rem; padding: .5rem 0; border-bottom: 1px solid #F3F4F6; }
+  .review-row .perf { font-size: .85rem; color: #374151; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .review-row .perf > span.venue { font-size: .72rem; color: #9CA3AF; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .review-row .cnt { font-size: .72rem; color: #9CA3AF; white-space: nowrap; }
+  .review-row select { border: 1px solid #D1D5DB; border-radius: 7px; padding: .35rem .5rem; font-family: inherit;
+    font-size: .82rem; color: #374151; background: #fff; }
+  .review-scroll { max-height: 320px; overflow-y: auto; margin-bottom: 1rem; }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(17,24,39,.5); display: none; align-items: center;
+    justify-content: center; z-index: 50; padding: 1rem; }
+  .modal { background: #fff; border-radius: 14px; max-width: 460px; width: 100%; padding: 1.5rem 1.5rem 1.25rem;
+    box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+  .modal-title { font-size: 1rem; font-weight: 700; color: #92400E; margin-bottom: .8rem; }
+  .modal-list { margin: 0 0 1.15rem; padding-left: 1.15rem; }
+  .modal-list li { font-size: .87rem; color: #374151; line-height: 1.55; margin-bottom: .35rem; }
+  .modal-ok { display: block; width: 100%; background: #4B5563; color: #fff; border: none; border-radius: 8px;
+    padding: .65rem; font-family: inherit; font-weight: 600; font-size: .9rem; cursor: pointer; transition: background .15s; }
+  .modal-ok:hover { background: #1F2937; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-body">
+    <div class="card-title">SG2 Report</div>
+    <div class="card-sub">Upload this month's Invoice Details and Purchase Details exports to generate the SG2 report workbook. Categories are filled in automatically; anything new is flagged for a quick review before the file is built.</div>
+
+    <div class="section-label">Invoice Details</div>
+    <div class="dropzone" id="dzInvoice" data-key="invoice">
+      <input type="file" accept=".csv,.xlsx,.xlsm" multiple>
+      <div class="dropzone-text">Drag &amp; drop or <a href="#" class="browse">browse</a></div>
+      <div class="dropzone-hint">One or more .csv / .xlsx / .xlsm files</div>
+    </div>
+    <div class="file-list" id="listInvoice"></div>
+
+    <div class="section-label spaced">Purchase Details</div>
+    <div class="dropzone" id="dzPurchase" data-key="purchase">
+      <input type="file" accept=".csv,.xlsx,.xlsm" multiple>
+      <div class="dropzone-text">Drag &amp; drop or <a href="#" class="browse">browse</a></div>
+      <div class="dropzone-hint">One or more .csv / .xlsx / .xlsm files</div>
+    </div>
+    <div class="file-list" id="listPurchase"></div>
+
+    <div class="field-label">Report file name (optional)</div>
+    <input type="text" class="text-input" id="labelInput" placeholder="auto-detected from event dates, e.g. April_2026_-_SG2_Report">
+
+    <div class="actions">
+      <button class="btn-process" id="processBtn" disabled>
+        <span id="btnLabel">Generate Report</span>
+        <div class="spinner" id="spinner"></div>
+      </button>
+      <button class="btn-clear" id="clearBtn">Clear</button>
+    </div>
+  </div>
+  <div class="results" id="results" style="display:none;"></div>
+</div>
+
+<div class="modal-overlay" id="warnModal">
+  <div class="modal">
+    <div class="modal-title">Heads up</div>
+    <ul class="modal-list" id="warnList"></ul>
+    <button class="modal-ok" id="warnOk">Okay</button>
+  </div>
+</div>
+
+<script>
+  const CATS = ["NFL", "MLB", "NBA", "NHL", "Concerts", "Other"];
+  const store = { invoice: [], purchase: [] };
+  const processBtn = document.getElementById('processBtn');
+  const btnLabel = document.getElementById('btnLabel');
+  const spinner = document.getElementById('spinner');
+  const resultsDiv = document.getElementById('results');
+
+  function listEl(key) { return document.getElementById(key === 'invoice' ? 'listInvoice' : 'listPurchase'); }
+
+  function setup(id) {
+    const dz = document.getElementById(id);
+    const key = dz.dataset.key;
+    const input = dz.querySelector('input[type="file"]');
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); add(key, e.dataTransfer.files); });
+    input.addEventListener('change', () => { add(key, input.files); input.value = ''; });
+    dz.querySelector('.browse').addEventListener('click', e => { e.preventDefault(); input.click(); });
+  }
+
+  function add(key, fileList) {
+    [...fileList].filter(f => /\.(csv|xlsx|xlsm)$/i.test(f.name)).forEach(f => {
+      if (!store[key].some(x => x.name === f.name && x.size === f.size)) store[key].push(f);
+    });
+    render(key);
+  }
+
+  function render(key) {
+    const list = listEl(key);
+    list.innerHTML = '';
+    store[key].forEach((f, i) => {
+      const pill = document.createElement('div');
+      pill.className = 'file-pill';
+      pill.innerHTML = `<span class="fname">${f.name}</span><button class="remove" title="Remove">&times;</button>`;
+      pill.querySelector('.remove').addEventListener('click', () => { store[key].splice(i, 1); render(key); });
+      list.appendChild(pill);
+    });
+    processBtn.disabled = store.invoice.length === 0;
+  }
+
+  ['dzInvoice', 'dzPurchase'].forEach(setup);
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    store.invoice = []; store.purchase = [];
+    render('invoice'); render('purchase');
+    document.getElementById('labelInput').value = '';
+    resultsDiv.style.display = 'none'; resultsDiv.innerHTML = '';
+  });
+
+  const warnModal = document.getElementById('warnModal');
+  document.getElementById('warnOk').addEventListener('click', () => { warnModal.style.display = 'none'; });
+  function showWarn(warnings) {
+    document.getElementById('warnList').innerHTML = warnings.map(w => `<li>${w}</li>`).join('');
+    warnModal.style.display = 'flex';
+  }
+
+  function busy(on, label) { processBtn.disabled = on || store.invoice.length === 0;
+    btnLabel.textContent = label; spinner.style.display = on ? 'block' : 'none'; }
+
+  function renderReady(d) {
+    const by = d.stats ? d.stats.by_category : null;
+    let stat = '';
+    if (d.stats) {
+      const parts = CATS.map(c => `${c}: ${(by[c] || 0).toLocaleString()}`).join(' &middot; ');
+      stat = `<div class="stat-line">${d.stats.invoice_rows.toLocaleString()} invoice rows &middot; ${d.stats.purchase_rows.toLocaleString()} purchase rows<br>${parts}</div>`;
+    }
+    resultsDiv.innerHTML = `<div class="download-wrap">
+        <a class="btn-download" href="${d.download_url}">Download ${d.filename}</a>${stat}
+      </div>`;
+    resultsDiv.style.display = 'block';
+  }
+
+  function renderReview(d) {
+    const rows = d.items.map((it, i) => `
+      <div class="review-row">
+        <span class="perf" title="${it.performer}${it.venue ? ' — ' + it.venue : ''}">${it.performer}${it.venue ? `<span class="venue">${it.venue}</span>` : ''}</span>
+        <span class="cnt">${it.rows.toLocaleString()} rows</span>
+        <select data-perf="${encodeURIComponent(it.performer)}">
+          ${CATS.map(c => `<option ${c === it.suggested ? 'selected' : ''}>${c}</option>`).join('')}
+        </select>
+      </div>`).join('');
+    resultsDiv.innerHTML = `<div class="review">
+        <div class="review-head">${d.items.length} new performer${d.items.length === 1 ? '' : 's'} to review</div>
+        <div class="review-note">These names aren't in the lookup yet. Confirm or change each category, then generate. Your choices are remembered for next month.</div>
+        <div class="review-scroll">${rows}</div>
+        <button class="btn-download" id="confirmBtn">Confirm &amp; Generate</button>
+      </div>`;
+    resultsDiv.style.display = 'block';
+    document.getElementById('confirmBtn').addEventListener('click', () => finalize(d.token));
+  }
+
+  async function finalize(token) {
+    const corrections = {};
+    resultsDiv.querySelectorAll('select[data-perf]').forEach(sel => {
+      corrections[decodeURIComponent(sel.dataset.perf)] = sel.value;
+    });
+    busy(true, 'Generating…');
+    try {
+      const resp = await fetch('/finalize', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, corrections }) });
+      const d = await resp.json();
+      if (!resp.ok || d.error) {
+        resultsDiv.innerHTML = `<div class="error-item"><p><strong>Error:</strong> ${d.error || 'Failed.'}</p></div>`;
+      } else { renderReady(d); }
+    } catch (err) {
+      resultsDiv.innerHTML = `<div class="error-item"><p><strong>Network error:</strong> ${err.message}</p></div>`;
+    } finally { busy(false, 'Generate Report'); }
+  }
+
+  processBtn.addEventListener('click', async () => {
+    if (!store.invoice.length) return;
+    busy(true, 'Generating…');
+    resultsDiv.style.display = 'none'; resultsDiv.innerHTML = '';
+    const fd = new FormData();
+    store.invoice.forEach(f => fd.append('invoice', f));
+    store.purchase.forEach(f => fd.append('purchase', f));
+    const label = document.getElementById('labelInput').value.trim();
+    if (label) fd.append('label', label);
+    try {
+      const resp = await fetch('/process', { method: 'POST', body: fd });
+      const d = await resp.json();
+      if (!resp.ok || d.error) {
+        resultsDiv.innerHTML = `<div class="error-item"><p><strong>Error:</strong> ${d.error || 'Processing failed.'}</p></div>`;
+        resultsDiv.style.display = 'block';
+      } else if (d.status === 'review') {
+        renderReview(d);
+      } else {
+        renderReady(d);
+      }
+      if (d.warnings && d.warnings.length) showWarn(d.warnings);
+    } catch (err) {
+      resultsDiv.innerHTML = `<div class="error-item"><p><strong>Network error:</strong> ${err.message}</p></div>`;
+      resultsDiv.style.display = 'block';
+    } finally { busy(false, 'Generate Report'); }
+  });
+</script>
+</body>
+</html>
