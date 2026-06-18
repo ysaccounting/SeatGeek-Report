@@ -363,6 +363,7 @@ def build_report(inv_df, purchase_df, mapping, report_label, category_list=None,
 
     # ---------------- Invoice Details ----------------
     inv = wb.create_sheet("Invoice Details")
+    inv.freeze_panes = "A2"
     inv.append([_woc(inv, h, bold=True, white=True, fill=_HDR_FILL) for h in out_cols])
     perf_idx = inv_cols.index(perf)
     for rec in inv_df.itertuples(index=False, name=None):
@@ -373,6 +374,7 @@ def build_report(inv_df, purchase_df, mapping, report_label, category_list=None,
 
     # ---------------- Purchase Details ----------------
     pur = wb.create_sheet("Purchase Details")
+    pur.freeze_panes = "A2"
     pur.append([_woc(pur, h, bold=True, white=True, fill=_HDR_FILL) for h in pur_cols])
     for rec in purchase_df.itertuples(index=False, name=None):
         pur.append([None if _isnan(v) else v for v in rec])
@@ -381,6 +383,7 @@ def build_report(inv_df, purchase_df, mapping, report_label, category_list=None,
     # Same shape as the uploaded master (Performer/Team, League) so this tab can be
     # fed back in next month. Sorted by category A-Z, then performer A-Z.
     cat_sheet = wb.create_sheet("Category")
+    cat_sheet.freeze_panes = "A2"
     cat_sheet.column_dimensions["A"].width = 48
     cat_sheet.column_dimensions["B"].width = 14
     cat_sheet.append([_woc(cat_sheet, h, bold=True, white=True, fill=_HDR_FILL)
@@ -450,6 +453,7 @@ def build_category_file(category_list):
     """Standalone running-list workbook (one Category sheet) for easy re-upload."""
     wb = Workbook(write_only=True)
     ws = wb.create_sheet("Category")
+    ws.freeze_panes = "A2"
     ws.column_dimensions["A"].width = 48
     ws.column_dimensions["B"].width = 14
     ws.append([_woc(ws, h, bold=True, white=True, fill=_HDR_FILL) for h in ("Performer/Team", "League")])
