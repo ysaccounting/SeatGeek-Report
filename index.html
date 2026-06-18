@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SeatGeek Report</title>
+<title>SG2 Report</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -49,6 +49,9 @@
   .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff;
     border-radius: 50%; animation: spin .7s linear infinite; display: none; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .progress { height: 6px; background: #E5E7EB; border-radius: 999px; overflow: hidden; margin-top: 1rem; display: none; }
+  .progress.active { display: block; }
+  .progress-bar { height: 100%; width: 0; background: #4B5563; border-radius: 999px; transition: width .35s ease; }
   .results { border-top: 1px solid #F3F4F6; }
   .download-wrap { padding: 1.25rem 2rem 1.5rem; }
   .btn-download { display: block; width: 100%; background: #374151; color: #fff; border: none; border-radius: 8px;
@@ -104,7 +107,7 @@
       <div class="dropzone-hint">One or more .csv / .xlsx / .xlsm files</div>
     </div>
     <div class="file-list" id="listPurchase"></div>
-   
+
     <div class="actions">
       <button class="btn-process" id="processBtn" disabled>
         <span id="btnLabel">Generate Report</span>
@@ -112,6 +115,7 @@
       </button>
       <button class="btn-clear" id="clearBtn">Clear</button>
     </div>
+    <div class="progress" id="progress"><div class="progress-bar" id="progressBar"></div></div>
   </div>
   <div class="results" id="results" style="display:none;"></div>
 </div>
@@ -170,7 +174,6 @@
   document.getElementById('clearBtn').addEventListener('click', () => {
     store.invoice = []; store.purchase = [];
     render('invoice'); render('purchase');
-    document.getElementById('labelInput').value = '';
     resultsDiv.style.display = 'none'; resultsDiv.innerHTML = '';
   });
 
@@ -181,8 +184,28 @@
     warnModal.style.display = 'flex';
   }
 
+  const progress = document.getElementById('progress');
+  const progressBar = document.getElementById('progressBar');
+  let progTimer = null;
+  function startProgress() {
+    clearInterval(progTimer);
+    progress.classList.add('active');
+    let w = 8; progressBar.style.width = w + '%';
+    progTimer = setInterval(() => {           // creep toward 90% while we wait
+      w += Math.max(0.4, (90 - w) * 0.06);
+      if (w > 90) w = 90;
+      progressBar.style.width = w + '%';
+    }, 300);
+  }
+  function finishProgress() {
+    clearInterval(progTimer);
+    progressBar.style.width = '100%';
+    setTimeout(() => { progress.classList.remove('active'); progressBar.style.width = '0'; }, 500);
+  }
+
   function busy(on, label) { processBtn.disabled = on || store.invoice.length === 0;
-    btnLabel.textContent = label; spinner.style.display = on ? 'block' : 'none'; }
+    btnLabel.textContent = label; spinner.style.display = on ? 'block' : 'none';
+    on ? startProgress() : finishProgress(); }
 
   function renderReady(d) {
     const by = d.stats ? d.stats.by_category : null;
@@ -241,8 +264,6 @@
     const fd = new FormData();
     store.invoice.forEach(f => fd.append('invoice', f));
     store.purchase.forEach(f => fd.append('purchase', f));
-    const label = document.getElementById('labelInput').value.trim();
-    if (label) fd.append('label', label);
     try {
       const resp = await fetch('/process', { method: 'POST', body: fd });
       const d = await resp.json();

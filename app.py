@@ -59,6 +59,7 @@ SEEN_PATH = os.environ.get("SEEN_PATH", os.path.join(BASE_DIR, "seen.json"))
 # =========================================================================== #
 
 DEAL_CODE = "SG2"
+REPORT_NAME = "SeatGeek Report"   # output file is "{REPORT_NAME} - {Month} {Year}.xlsx"
 PROFIT_SHARE = 0.30          # SG share of profit
 FEE_RATE = 0.07              # fee as % of revenue, taken before the profit share
 CAPITAL_INVESTED = 19881500  # "Capital invested by SG to date" (fixed; edit when it changes)
@@ -472,15 +473,26 @@ def _safe(s):
     return re.sub(r'[\\/:*?"<>|]+', " ", str(s)).strip() if s else s
 
 
-def _default_label(inv_df):
-    col = _resolve(inv_df, INV_EVENT_DATE) or _resolve(inv_df, "Created Date")
-    when = None
-    if col is not None:
-        dates = pd.to_datetime(inv_df[col], errors="coerce")
-        if dates.notna().any():
-            when = dates.max()
-    when = when or dt.datetime.now()
-    return f"{when.strftime('%B_%Y')}_-_{DEAL_CODE}_Report"
+def _default_label(inv_df, pur_df=None):
+    # Report period ends at the latest transaction in the files: invoice "Created Date"
+    # and purchase "PO Created". (Event Date is ignored — it runs into the future.)
+    cands = []
+    icol = _resolve(inv_df, "Created Date")
+    if icol is not None:
+        d = pd.to_datetime(inv_df[icol], errors="coerce")
+        if d.notna().any():
+            cands.append(d.max())
+    if pur_df is not None and not pur_df.empty:
+        pcol = _resolve(pur_df, "PO Created")
+        if pcol is not None:
+            d = pd.to_datetime(pur_df[pcol], errors="coerce")
+            if d.notna().any():
+                cands.append(d.max())
+    today = pd.Timestamp.now()
+    when = max(cands) if cands else None
+    if when is None or when > today:
+        when = today.normalize().replace(day=1) - pd.Timedelta(days=1)  # prior month-end
+    return f"{REPORT_NAME} - {when.strftime('%B %Y')}"
 
 
 # =========================================================================== #
@@ -555,7 +567,7 @@ def process():
     except Exception as exc:
         return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
 
-    label = (request.form.get("label") or "").strip() or _default_label(inv)
+    label = (request.form.get("label") or "").strip() or _default_label(inv, pur)
     token = uuid.uuid4().hex
     _store(token, inv, pur, mapping, label)
     _cleanup_old()
