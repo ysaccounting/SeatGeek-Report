@@ -172,6 +172,10 @@
   ['dzInvoice', 'dzPurchase'].forEach(setup);
 
   document.getElementById('clearBtn').addEventListener('click', () => {
+    if (inflight) { inflight.abort(); inflight = null; }   // cancel any running generation
+    resetProgress();
+    spinner.style.display = 'none';
+    btnLabel.textContent = 'Generate Report';
     store.invoice = []; store.purchase = [];
     render('invoice'); render('purchase');
     resultsDiv.style.display = 'none'; resultsDiv.innerHTML = '';
@@ -202,6 +206,12 @@
     progressBar.style.width = '100%';
     setTimeout(() => { progress.classList.remove('active'); progressBar.style.width = '0'; }, 500);
   }
+  function resetProgress() {              // immediate stop, no 100% flash (used on cancel)
+    clearInterval(progTimer);
+    progress.classList.remove('active');
+    progressBar.style.width = '0';
+  }
+  let inflight = null;                    // AbortController for the active request
 
   function busy(on, label) { processBtn.disabled = on || store.invoice.length === 0;
     btnLabel.textContent = label; spinner.style.display = on ? 'block' : 'none';
@@ -245,16 +255,18 @@
       corrections[decodeURIComponent(sel.dataset.perf)] = sel.value;
     });
     busy(true, 'Generating…');
+    inflight = new AbortController();
     try {
       const resp = await fetch('/finalize', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, corrections }) });
+        body: JSON.stringify({ token, corrections }), signal: inflight.signal });
       const d = await resp.json();
       if (!resp.ok || d.error) {
         resultsDiv.innerHTML = `<div class="error-item"><p><strong>Error:</strong> ${d.error || 'Failed.'}</p></div>`;
       } else { renderReady(d); }
     } catch (err) {
+      if (err.name === 'AbortError') return;
       resultsDiv.innerHTML = `<div class="error-item"><p><strong>Network error:</strong> ${err.message}</p></div>`;
-    } finally { busy(false, 'Generate Report'); }
+    } finally { inflight = null; busy(false, 'Generate Report'); }
   }
 
   processBtn.addEventListener('click', async () => {
@@ -264,8 +276,9 @@
     const fd = new FormData();
     store.invoice.forEach(f => fd.append('invoice', f));
     store.purchase.forEach(f => fd.append('purchase', f));
+    inflight = new AbortController();
     try {
-      const resp = await fetch('/process', { method: 'POST', body: fd });
+      const resp = await fetch('/process', { method: 'POST', body: fd, signal: inflight.signal });
       const d = await resp.json();
       if (!resp.ok || d.error) {
         resultsDiv.innerHTML = `<div class="error-item"><p><strong>Error:</strong> ${d.error || 'Processing failed.'}</p></div>`;
@@ -277,9 +290,10 @@
       }
       if (d.warnings && d.warnings.length) showWarn(d.warnings);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       resultsDiv.innerHTML = `<div class="error-item"><p><strong>Network error:</strong> ${err.message}</p></div>`;
       resultsDiv.style.display = 'block';
-    } finally { busy(false, 'Generate Report'); }
+    } finally { inflight = null; busy(false, 'Generate Report'); }
   });
 </script>
 </body>
