@@ -270,7 +270,7 @@ _HDR_FILL = PatternFill("solid", fgColor="374151")
 _TOT_FILL = PatternFill("solid", fgColor="EAECF0")
 
 
-def _woc(ws, value, *, bold=False, white=False, fill=None, numfmt=None, wrap=False):
+def _woc(ws, value, *, bold=False, white=False, fill=None, numfmt=None, wrap=False, center=False):
     c = WriteOnlyCell(ws, value=value)
     if bold or white:
         c.font = Font(bold=bold, color="FFFFFF" if white else "111111")
@@ -278,8 +278,9 @@ def _woc(ws, value, *, bold=False, white=False, fill=None, numfmt=None, wrap=Fal
         c.fill = fill
     if numfmt:
         c.number_format = numfmt
-    if wrap:
-        c.alignment = Alignment(wrap_text=True, vertical="center")
+    if center or wrap:
+        c.alignment = Alignment(horizontal="center" if center else None,
+                                vertical="center", wrap_text=wrap)
     return c
 
 
@@ -314,37 +315,37 @@ def build_report(inv_df, purchase_df, mapping, report_label, category_list=None,
 
     # ---------------- Summary ----------------
     sm = wb.create_sheet("Summary")
-    # Widths sized so every header sits on one line (no wrapping).
-    col_widths = {"A": 16, "B": 19, "C": 14, "D": 14, "E": 14,
+    # A wide enough for "Capital invested by SG to date"; headers sit on one line.
+    col_widths = {"A": 32, "B": 19, "C": 14, "D": 14, "E": 14,
                   "F": 14, "G": 15, "H": 13, "I": 21, "J": 31}
     for col, w in col_widths.items():
         sm.column_dimensions[col].width = w
-    sm.append([_woc(sm, summary_title, bold=True)])
+    sm.append([_woc(sm, summary_title, bold=True)])   # A1 stays left-aligned
     headers = ["Inventory Type", "Sales within deal",
                "% Sales on SG", "% Sales on VS", "% Sales on SH", "% Sales Other",
                "COGS", "Profit", "Profit Share to SG", "Profit Share to SG Less fees"]
-    sm.append([_woc(sm, h, bold=True, white=True, fill=_HDR_FILL) for h in headers])
+    sm.append([_woc(sm, h, bold=True, white=True, fill=_HDR_FILL, center=True) for h in headers])
 
     first, last = 3, 3 + len(CATEGORY_ORDER) - 1
     for i, cat in enumerate(CATEGORY_ORDER):
         r = first + i
-        row = [_woc(sm, cat, bold=True)]
-        row.append(_woc(sm, f"=SUMIF('Invoice Details'!$A:$A,Summary!$A{r},'Invoice Details'!${price_L}:${price_L})", numfmt=_MONEY0))
+        row = [_woc(sm, cat, bold=True, center=True)]
+        row.append(_woc(sm, f"=SUMIF('Invoice Details'!$A:$A,Summary!$A{r},'Invoice Details'!${price_L}:${price_L})", numfmt=_MONEY0, center=True))
         for _, client in MARKETPLACES:
-            row.append(_woc(sm, f'=SUMIFS(\'Invoice Details\'!${price_L}:${price_L},\'Invoice Details\'!${client_L}:${client_L},"{client}",\'Invoice Details\'!$A:$A,Summary!$A{r})/$B{r}', numfmt=_PCT0))
+            row.append(_woc(sm, f'=SUMIFS(\'Invoice Details\'!${price_L}:${price_L},\'Invoice Details\'!${client_L}:${client_L},"{client}",\'Invoice Details\'!$A:$A,Summary!$A{r})/$B{r}', numfmt=_PCT, center=True))
         c0 = get_column_letter(3)
         cN = get_column_letter(2 + len(MARKETPLACES))
-        row.append(_woc(sm, f"=1-SUM({c0}{r}:{cN}{r})", numfmt=_PCT0))
-        row.append(_woc(sm, f"=SUMIF('Invoice Details'!$A:$A,Summary!$A{r},'Invoice Details'!${cost_L}:${cost_L})", numfmt=_MONEY0))
-        row.append(_woc(sm, f"=B{r}-G{r}", numfmt=_MONEY0))
-        row.append(_woc(sm, f"=H{r}*{PROFIT_SHARE}", numfmt=_MONEY0))
-        row.append(_woc(sm, f"=(H{r}-{FEE_RATE}*B{r})*{PROFIT_SHARE}", numfmt=_MONEY0))
+        row.append(_woc(sm, f"=1-SUM({c0}{r}:{cN}{r})", numfmt=_PCT, center=True))
+        row.append(_woc(sm, f"=SUMIF('Invoice Details'!$A:$A,Summary!$A{r},'Invoice Details'!${cost_L}:${cost_L})", numfmt=_MONEY0, center=True))
+        row.append(_woc(sm, f"=B{r}-G{r}", numfmt=_MONEY0, center=True))
+        row.append(_woc(sm, f"=H{r}*{PROFIT_SHARE}", numfmt=_MONEY0, center=True))
+        row.append(_woc(sm, f"=(H{r}-{FEE_RATE}*B{r})*{PROFIT_SHARE}", numfmt=_MONEY0, center=True))
         sm.append(row)
 
     # Totals
-    tr = [_woc(sm, "Totals", bold=True, fill=_TOT_FILL)]
+    tr = [_woc(sm, "Totals", bold=True, fill=_TOT_FILL, center=True)]
     def tcell(formula, fmt):
-        return _woc(sm, formula, bold=True, fill=_TOT_FILL, numfmt=fmt)
+        return _woc(sm, formula, bold=True, fill=_TOT_FILL, numfmt=fmt, center=True)
     tr.append(tcell(f"=SUM(B{first}:B{last})", _MONEY0))
     for col in "CDEF":
         tr.append(tcell(f"=SUMPRODUCT($B${first}:$B${last}*{col}{first}:{col}{last})/$B${last+1}", _PCT0))
@@ -354,11 +355,11 @@ def build_report(inv_df, purchase_df, mapping, report_label, category_list=None,
 
     sm.append([])
     sm.append([])
-    sm.append([_woc(sm, "Capital invested by SG to date", bold=True),
-               _woc(sm, CAPITAL_INVESTED, numfmt=_MONEY0)])
+    sm.append([_woc(sm, "Capital invested by SG to date", bold=True, center=True),
+               _woc(sm, CAPITAL_INVESTED, numfmt=_MONEY0, center=True)])
     fund = f"=SUM('Purchase Details'!{pur_cost_L}:{pur_cost_L})" if pur_cost_L else 0
-    sm.append([_woc(sm, "Size of inventory Fund", bold=True),
-               _woc(sm, fund, numfmt=_MONEY0)])
+    sm.append([_woc(sm, "Size of inventory Fund", bold=True, center=True),
+               _woc(sm, fund, numfmt=_MONEY0, center=True)])
 
     # ---------------- Invoice Details ----------------
     inv = wb.create_sheet("Invoice Details")
